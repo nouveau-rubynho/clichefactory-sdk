@@ -1,7 +1,17 @@
 [project]
 name = "clichefactory"
 dynamic = ["version"]
+description = "Python SDK and CLI for ClicheFactory — structured data extraction from documents"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Urban Susnik s.p.", email = "info@clichefactory.com"}]
 requires-python = ">=3.12"
+keywords = ["document-extraction", "ocr", "pdf", "llm", "pydantic", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "anyio>=4.0.0,<5",
     "httpx>=0.28.0,<0.29",
@@ -29,6 +39,10 @@ local = [
     "tesserocr>=2.7.0,<2.9.0",
     "pypdf>=4.0.0,<4.2.0",
 ]
+
+[project.urls]
+Homepage = "https://clichefactory.com"
+Repository = "https://github.com/nouveau-rubynho/clichefactory-sdk"
 
 [tool.hatch.version]
 path = "clichefactory/__about__.py"
