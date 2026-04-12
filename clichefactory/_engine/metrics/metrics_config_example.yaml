@@ -1,0 +1,22 @@
+# Metrics configuration: field weights and per-field fuzzy thresholds.
+# Fields not in field_weights get uniform share of remaining weight.
+# Fields not in field_fuzzy_config use strict matching (threshold 1.0).
+
+field_weights:
+  invoice_number: 0.15
+  date: 0.10
+  vendor_name: 0.10
+  vendor_address: 0.05
+  line_items: 0.40
+  total_before_discount: 0.05
+  total_amount: 0.05
+  total_with_vat: 0.10
+  # ... other fields as needed
+
+# Per-field fuzzy threshold in [0, 1]. Only listed fields use fuzzy matching.
+# Omitted fields are strict (1.0).
+field_fuzzy_config:
+  vendor_name: 0.90
+  vendor_address: 0.85
+  invoice_number: 1.0  # strict
+  # date, totals, etc. omitted = strict

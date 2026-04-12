@@ -1,0 +1,154 @@
+"""Tests for SDK API boundary enforcement (Plan B).
+
+Validates that:
+- S3 URIs are rejected in user-facing extract and to_markdown paths
+- `parser` is not sent in service extract payloads
+- `ParsingOptions` emits a warning in service extract mode
+"""
+from __future__ import annotations
+
+import warnings
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from pydantic import BaseModel
+
+from clichefactory import ValidationError, factory
+from clichefactory.errors import ErrorInfo
+from clichefactory._service import _extract_config
+from clichefactory.types import ParsingOptions
+
+
+class SimpleSchema(BaseModel):
+    name: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# S3 URI rejection
+# ---------------------------------------------------------------------------
+
+class TestS3UriRejection:
+    """S3 URIs must be rejected in both extract and to_markdown user paths."""
+
+    def test_extract_rejects_s3_uri(self):
+        client = factory(api_key="cliche-test", mode="service")
+        c = client.cliche(SimpleSchema)
+
+        with pytest.raises(ValidationError) as exc_info:
+            c.extract(file="s3://bucket/key/document.pdf")
+
+        assert exc_info.value.info.code == "input.s3_uri_not_allowed"
+
+    def test_to_markdown_rejects_s3_uri(self):
+        client = factory(api_key="cliche-test", mode="service")
+
+        with pytest.raises(ValidationError) as exc_info:
+            client.to_markdown(file="s3://bucket/key/document.pdf", mode="service")
+
+        assert exc_info.value.info.code == "input.s3_uri_not_allowed"
+
+    def test_extract_rejects_various_s3_patterns(self):
+        client = factory(api_key="cliche-test", mode="service")
+        c = client.cliche(SimpleSchema)
+
+        for uri in [
+            "s3://bucket/key",
+            "s3://my-bucket/path/to/file.pdf",
+            "s3://bucket/a",
+        ]:
+            with pytest.raises(ValidationError) as exc_info:
+                c.extract(file=uri)
+            assert exc_info.value.info.code == "input.s3_uri_not_allowed"
+
+
+# ---------------------------------------------------------------------------
+# Parser not sent in service extract config
+# ---------------------------------------------------------------------------
+
+class TestExtractConfigNoParser:
+    """`_extract_config` should not accept or emit a `parser` field."""
+
+    def test_extract_config_has_no_parser_param(self):
+        import inspect
+        sig = inspect.signature(_extract_config)
+        assert "parser" not in sig.parameters
+
+    def test_extract_config_output_has_no_parser(self):
+        cfg = _extract_config(mode="fast", llm=None, ocr_llm=None)
+        assert "parser" not in cfg
+        assert cfg["extraction_mode"] == "fast"
+
+    def test_extract_config_empty(self):
+        cfg = _extract_config(mode=None, llm=None, ocr_llm=None)
+        assert "parser" not in cfg
+
+
+# ---------------------------------------------------------------------------
+# ParsingOptions and parser warnings in service extract
+# ---------------------------------------------------------------------------
+
+class TestServiceExtractWarnings:
+    """Service-mode extract should warn when parser or ParsingOptions are provided."""
+
+    @patch("clichefactory._service.service_extract_via_canonical", new_callable=AsyncMock)
+    @patch("clichefactory._upload.presign_and_upload_file", new_callable=AsyncMock)
+    def test_parser_warns_in_service_extract(self, mock_upload, mock_svc):
+        mock_upload.return_value = type("R", (), {
+            "file_uri": "s3://bucket/uploaded.pdf",
+            "document_id": "doc-1",
+        })()
+        mock_svc.return_value = {"result": {"name": "test"}, "status": "ok"}
+
+        client = factory(api_key="cliche-test", mode="service")
+        c = client.cliche(SimpleSchema)
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            c.extract(file="/tmp/test.pdf", parser="fast")
+
+        parser_warnings = [x for x in w if "parser" in str(x.message).lower()]
+        assert len(parser_warnings) >= 1
+        assert "no effect" in str(parser_warnings[0].message).lower()
+
+    @patch("clichefactory._service.service_extract_via_canonical", new_callable=AsyncMock)
+    @patch("clichefactory._upload.presign_and_upload_file", new_callable=AsyncMock)
+    def test_parsing_options_warns_in_service_extract(self, mock_upload, mock_svc):
+        mock_upload.return_value = type("R", (), {
+            "file_uri": "s3://bucket/uploaded.pdf",
+            "document_id": "doc-1",
+        })()
+        mock_svc.return_value = {"result": {"name": "test"}, "status": "ok"}
+
+        parsing = ParsingOptions(pdf_image_parser="docling")
+        client = factory(api_key="cliche-test", mode="service", parsing=parsing)
+        c = client.cliche(SimpleSchema)
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            c.extract(file="/tmp/test.pdf")
+
+        parsing_warnings = [x for x in w if "ParsingOptions" in str(x.message)]
+        assert len(parsing_warnings) >= 1
+        assert "local mode" in str(parsing_warnings[0].message).lower()
+
+    @patch("clichefactory._service.service_extract_via_canonical", new_callable=AsyncMock)
+    @patch("clichefactory._upload.presign_and_upload_file", new_callable=AsyncMock)
+    def test_no_warning_without_parser_or_parsing(self, mock_upload, mock_svc):
+        mock_upload.return_value = type("R", (), {
+            "file_uri": "s3://bucket/uploaded.pdf",
+            "document_id": "doc-1",
+        })()
+        mock_svc.return_value = {"result": {"name": "test"}, "status": "ok"}
+
+        client = factory(api_key="cliche-test", mode="service")
+        c = client.cliche(SimpleSchema)
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            c.extract(file="/tmp/test.pdf")
+
+        boundary_warnings = [
+            x for x in w
+            if "parser" in str(x.message).lower() or "ParsingOptions" in str(x.message)
+        ]
+        assert len(boundary_warnings) == 0
