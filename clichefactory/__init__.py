@@ -3,12 +3,26 @@ from __future__ import annotations
 from clichefactory.__about__ import __version__
 from clichefactory.client import Client, factory
 from clichefactory.cliche import Cliche
-from clichefactory.types import Endpoint, PartialExtraction, ParsingOptions, PostprocessFn
+from clichefactory.types import (
+    Chunk,
+    Endpoint,
+    FieldValue,
+    LongExtractionResult,
+    PartialExtraction,
+    ParsingOptions,
+    PostprocessFn,
+    Resolver,
+    ResolverContext,
+    ResolverFn,
+    ResolverSpec,
+    ResolutionTrace,
+)
 from clichefactory.errors import (
     AuthenticationError,
     ClicheFactoryError,
     ConfigurationError,
     ExtractionError,
+    LongExtractionError,
     ParsingError,
     ServiceUnavailableError,
     TrainingError,
@@ -21,16 +35,25 @@ from clichefactory.errors import (
 __all__ = [
     "__version__",
     "AuthenticationError",
+    "Chunk",
     "Cliche",
     "ClicheFactoryError",
     "Client",
     "ConfigurationError",
     "Endpoint",
     "ExtractionError",
+    "FieldValue",
+    "LongExtractionError",
+    "LongExtractionResult",
     "ParsingError",
     "ParsingOptions",
     "PartialExtraction",
     "PostprocessFn",
+    "Resolver",
+    "ResolverContext",
+    "ResolverFn",
+    "ResolverSpec",
+    "ResolutionTrace",
     "ServiceUnavailableError",
     "TrainingError",
     "UnsupportedModeError",

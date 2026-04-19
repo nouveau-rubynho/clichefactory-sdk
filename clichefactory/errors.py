@@ -59,3 +59,18 @@ class TrainingError(ClicheFactoryError):
 class ValidationError(ClicheFactoryError):
     pass
 
+
+class LongExtractionError(ClicheFactoryError):
+    """Raised when long-document orchestration fails.
+
+    Error codes:
+
+    - ``long.chunker_failed`` — the ``ChunkStrategy`` raised while splitting.
+    - ``long.no_chunks`` — the chunker produced zero chunks.
+    - ``long.all_chunks_failed`` — every per-chunk extraction raised.
+    - ``long.resolver_failed`` — a resolver callable raised while merging.
+    - ``long.unsupported_mode`` — requested mode can't run per-chunk today.
+    """
+
+    pass
+

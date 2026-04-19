@@ -174,6 +174,142 @@ docs = client.to_markdown_batch(
 )
 ```
 
+## Long documents (chunk + merge)
+
+`Cliche.extract` is designed for documents that fit in one LLM context
+window — in practice, roughly **up to ~20 pages** for dense text, more for
+sparse layouts. For longer files, use `extract_long`, which:
+
+1. Converts the document to markdown **once**.
+2. Splits the markdown into chunks (by default: token-sized).
+3. Extracts each chunk in parallel as a partial result.
+4. Merges per-chunk values field-by-field using **resolvers** you declare.
+5. Validates the merged dict against your Pydantic model, running the
+   same coercion + `postprocess` pipeline as `extract`.
+
+Every chunk is a separate `extract` call, so billing accrues per page
+across all chunks. Trained artifacts and `mode="robust" / "robust-trained"`
+are not supported in this SDK release.
+
+### Basic usage
+
+```python
+from pydantic import BaseModel
+from clichefactory import factory, Endpoint
+from clichefactory.chunking import PageChunker
+from clichefactory.resolvers import (
+    concat_dedupe, first_non_null, last_non_null, sum_numeric,
+)
+
+
+class LineItem(BaseModel):
+    description: str
+    amount: float
+
+
+class Invoice(BaseModel):
+    invoice_number: str | None = None
+    total: float | None = None
+    customer_name: str | None = None
+    line_items: list[LineItem] = []
+
+
+client = factory(api_key="cliche-...", model=Endpoint(provider_model="openai/gpt-5"))
+
+cliche = client.cliche(
+    Invoice,
+    resolvers={
+        "invoice_number": first_non_null,
+        "customer_name":  first_non_null,
+        "total":          last_non_null,
+        "line_items":     concat_dedupe(key="description"),
+    },
+)
+
+result: Invoice = cliche.extract_long(
+    file="big_invoice.pdf",
+    chunker=PageChunker(pages_per_chunk=15, overlap_pages=1),
+    max_concurrency=4,
+)
+```
+
+### Chunkers
+
+`clichefactory.chunking` ships three strategies:
+
+| Chunker | When to use | Needs |
+|---|---|---|
+| `TokenChunker(max_tokens=..., overlap_tokens=...)` | Default. Works anywhere. | – |
+| `PageChunker(pages_per_chunk=..., overlap_pages=...)` | Invoices, contracts, page-structured PDFs. | Page markers in the markdown (`<!-- cf:page N -->` / `<!-- page: N -->`). Falls back to token chunking and warns otherwise. |
+| `HeadingChunker(max_tokens=..., min_heading_level=2)` | Manuals, long-form reports. | Markdown headings. |
+
+You can also pass your own object implementing the `ChunkStrategy` protocol
+(`async def chunks(markdown, meta) -> list[Chunk]`).
+
+### Resolvers
+
+A resolver reduces one field's per-chunk values to one final value. Built-ins
+live in `clichefactory.resolvers`:
+
+**Scalars**: `first_non_null`, `last_non_null`, `most_common`,
+`pick_by_confidence`, `sum_numeric`, `max_numeric`, `min_numeric`.
+
+**Collections**: `concat`, `concat_dedupe(key=...)`, `union_by(key)`.
+`concat` also has a factory form for strings: `concat(separator="\n\n")`.
+
+**LLM-backed** (opt-in, v1 stub falls back to `most_common`):
+`llm_reconcile(instructions=..., model=...)`.
+
+**Custom callables** follow the signature
+`(list[FieldValue], ResolverContext) -> Any`:
+
+```python
+def pick_longest(values, ctx):
+    non_null = [fv for fv in values if fv.value]
+    return max(non_null, key=lambda fv: len(fv.value)).value if non_null else None
+
+
+cliche.extract_long(file=..., resolvers={"description": pick_longest})
+```
+
+**String aliases** for config-driven use:
+
+```python
+resolvers = {
+    "invoice_number": "first_non_null",
+    "line_items":     "concat_dedupe_by=line_id",
+    "notes":          "concat",
+}
+```
+
+### Default policy
+
+Any field without an explicit resolver is resolved by a per-JSON-type default:
+
+- `type: array` → `concat` **with a `UserWarning`** telling you which field
+  and how to override (`concat_dedupe(key=...)`).
+- `type: string | number | integer | boolean | object` → `first_non_null`.
+
+Warnings are intentionally loud so silent concatenation never surprises you.
+
+### Debug / review surface
+
+Pass `include_chunk_results=True` to get a `LongExtractionResult[T]`:
+
+```python
+detailed = cliche.extract_long(file="big.pdf", include_chunk_results=True)
+
+detailed.value          # Invoice — the resolved, validated model
+detailed.chunks         # tuple[Chunk, ...] — what got split
+detailed.per_chunk      # tuple[Invoice | PartialExtraction | ..., ...]
+detailed.per_field      # dict[str, tuple[FieldValue, ...]]
+detailed.resolutions    # dict[str, ResolutionTrace] — which resolver won
+detailed.cost           # {"by_chunk": [...], "num_chunks": N, "total_usd": ...}
+detailed.warnings       # tuple[str, ...]
+```
+
+This is also the shape Emio needs if you ever build a long-doc review UI.
+
 ## SaaS pricing (service mode)
 
 Billing applies only when using **`mode="service"`** with a ClicheFactory API key. Local runs are not metered by the platform.

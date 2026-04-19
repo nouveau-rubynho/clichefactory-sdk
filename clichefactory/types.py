@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Callable, Literal
+from dataclasses import dataclass, field
+from typing import Any, Callable, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -128,4 +128,91 @@ class TrainingResultEnvelope(BaseModel):
     metrics: TrainingMetrics | None = None
     costs: CostInfo | None = None
     meta: TrainingMeta | None = None
+
+
+# ── Long-document extraction ─────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class Chunk:
+    """A slice of a long document's markdown.
+
+    ``page_start`` / ``page_end`` are 1-indexed and inclusive.  They are
+    ``None`` when the chunker cannot determine page boundaries (e.g. a
+    plain text input, or markdown without page markers).
+    """
+
+    index: int
+    text: str
+    page_start: int | None = None
+    page_end: int | None = None
+    heading_path: tuple[str, ...] = ()
+    char_start: int | None = None
+    char_end: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class FieldValue:
+    """One field's value observed in one chunk's extraction result.
+
+    ``value`` is ``None`` when the chunk produced no value for this field
+    (missing, null, or an empty collection).  ``confidence`` is ``None``
+    unless the underlying LLM provided logprobs/confidence data.
+    """
+
+    value: Any
+    chunk: "Chunk"
+    confidence: float | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ResolverContext:
+    """Context passed to a resolver alongside the per-chunk values."""
+
+    field_name: str
+    field_schema: dict[str, Any]
+    all_chunks: tuple["Chunk", ...]
+
+
+# ``ResolverFn`` is the low-level callable contract.  A resolver can also
+# be a string alias (e.g. ``"first_non_null"``) or a pre-built factory
+# result from ``clichefactory.resolvers`` — see ``Resolver`` below.
+ResolverFn = Callable[[list["FieldValue"], "ResolverContext"], Any]
+Resolver = ResolverFn | str
+ResolverSpec = dict[str, Resolver]
+
+
+@dataclass(frozen=True, slots=True)
+class ResolutionTrace:
+    """Per-field record of which resolver ran and what it saw.
+
+    Useful for debugging long-document merges and for review UIs.
+    """
+
+    field_name: str
+    resolver_name: str
+    per_chunk_values: tuple["FieldValue", ...]
+    winning_chunk_indices: tuple[int, ...]
+    final_value: Any
+    warnings: tuple[str, ...] = ()
+
+
+T = TypeVar("T")
+
+
+@dataclass(frozen=True, slots=True)
+class LongExtractionResult(Generic[T]):
+    """Rich return type for ``Cliche.extract_long(include_chunk_results=True)``.
+
+    When ``include_chunk_results=False`` (the default), ``extract_long`` returns
+    just ``value`` directly so the signature matches ``extract``.
+    """
+
+    value: T
+    chunks: tuple["Chunk", ...]
+    per_chunk: tuple[Any, ...]
+    per_field: dict[str, tuple["FieldValue", ...]]
+    resolutions: dict[str, "ResolutionTrace"]
+    warnings: tuple[str, ...] = ()
+    cost: dict[str, Any] = field(default_factory=dict)
 

@@ -13,7 +13,12 @@ from clichefactory.errors import (
     ErrorInfo,
     ValidationError,
 )
-from clichefactory.types import Endpoint, ParsingOptions, PostprocessFn
+from clichefactory.types import (
+    Endpoint,
+    ParsingOptions,
+    PostprocessFn,
+    ResolverSpec,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -197,6 +202,7 @@ class Client:
         parsing: ParsingOptions | None = None,
         artifact_id: str | None = None,
         postprocess: PostprocessFn | None = None,
+        resolvers: ResolverSpec | None = None,
     ) -> "clichefactory.cliche.Cliche[T]":
         """Create a :class:`~clichefactory.Cliche` bound to this client.
 
@@ -236,6 +242,14 @@ class Client:
                     return result
 
                 cliche = client.cliche(Invoice, postprocess=fix_dates)
+        resolvers:
+            Default per-field resolvers for
+            :meth:`~clichefactory.Cliche.extract_long`.  Keys are top-level
+            schema field names, values are callables from
+            :mod:`clichefactory.resolvers` or string aliases
+            (``"first_non_null"``, ``"concat"``, ``"concat_dedupe_by=<attr>"``,
+            etc.).  Resolvers passed to ``extract_long(resolvers=...)`` merge
+            over these.  Has no effect on :meth:`~clichefactory.Cliche.extract`.
         """
         from clichefactory.cliche import Cliche
 
@@ -246,6 +260,7 @@ class Client:
             parsing=parsing,
             artifact_id=artifact_id,
             postprocess=postprocess,
+            resolvers=resolvers,
         )
 
     async def to_markdown_async(

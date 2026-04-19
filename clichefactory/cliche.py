@@ -13,7 +13,13 @@ from clichefactory.errors import (
     ErrorInfo,
     ValidationError,
 )
-from clichefactory.types import Endpoint, ParsingOptions, PostprocessFn
+from clichefactory.types import (
+    Endpoint,
+    ParsingOptions,
+    PostprocessFn,
+    Resolver,
+    ResolverSpec,
+)
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -75,6 +81,7 @@ class Cliche(Generic[T]):
         parsing: ParsingOptions | None,
         artifact_id: str | None = None,
         postprocess: PostprocessFn | None = None,
+        resolvers: ResolverSpec | None = None,
     ) -> None:
         self._client = client
         self._schema = schema
@@ -82,6 +89,7 @@ class Cliche(Generic[T]):
         self._parsing = parsing
         self._artifact_id = artifact_id
         self._postprocess = postprocess
+        self._resolvers: ResolverSpec | None = dict(resolvers) if resolvers else None
 
     async def extract_async(
         self,
@@ -302,4 +310,104 @@ class Cliche(Generic[T]):
 
     def extract_batch(self, *args: Any, **kwargs: Any) -> list[Any]:
         return run_sync(self.extract_batch_async(*args, **kwargs))
+
+    # ── Long-document extraction ──────────────────────────────────────────
+
+    async def extract_long_async(
+        self,
+        *,
+        file: str | bytes,
+        filename: str | None = None,
+        chunker: Any = None,  # clichefactory.chunking.ChunkStrategy
+        resolvers: ResolverSpec | None = None,
+        default_resolver: Resolver | None = None,
+        max_concurrency: int = 4,
+        include_chunk_results: bool = False,
+        mode: ExtractionMode | None = None,
+        parsing: ParsingOptions | None = None,
+        model: Endpoint | None = None,
+        ocr_model: Endpoint | None = None,
+        include_costs: bool = True,
+    ) -> Any:
+        """Extract from a long document via chunk + merge.
+
+        Use this when a document is too large to fit in one LLM context
+        window (typically > ~20 pages).  The pipeline:
+
+        1. Converts the whole file to markdown once.
+        2. Splits the markdown into chunks using ``chunker``
+           (default :class:`~clichefactory.chunking.TokenChunker`).
+        3. Extracts each chunk as a partial result, in parallel up to
+           ``max_concurrency``.
+        4. Merges per-chunk values field-by-field using ``resolvers``
+           (merged over any set on the ``Cliche`` itself).  Fields without
+           an explicit resolver get a sensible default based on their JSON
+           schema type — ``concat`` for arrays (with a warning),
+           ``first_non_null`` for scalars.
+        5. Runs the merged dict through the same
+           coerce → postprocess → Pydantic-validate pipeline as
+           :meth:`extract`.
+
+        Parameters
+        ----------
+        file:
+            Path or ``bytes``.  ``text=`` is not supported here; chunk
+            ``text`` yourself and call :meth:`extract` per chunk if you
+            already have markdown.
+        chunker:
+            A :class:`~clichefactory.chunking.ChunkStrategy`.  Defaults to
+            ``TokenChunker()``.
+        resolvers:
+            ``{field_name: resolver}``.  Merged over any cliche-level
+            resolvers.  Values may be callables or string aliases
+            (e.g. ``"first_non_null"``, ``"concat"``,
+            ``"concat_dedupe_by=line_id"``).
+        default_resolver:
+            Resolver used for any field not in ``resolvers``.  If unset,
+            the per-type default policy applies.
+        max_concurrency:
+            How many chunks to extract in parallel.  Default 4.
+        include_chunk_results:
+            When ``True``, return a
+            :class:`~clichefactory.types.LongExtractionResult` that exposes
+            chunks, per-chunk results, per-field values, and which resolver
+            fired for each field.  Default ``False`` returns just the
+            validated model, matching :meth:`extract`.
+        mode:
+            Optional extraction mode passed to each chunk-level
+            :meth:`extract_async` call.  ``trained`` /
+            ``robust`` / ``robust-trained`` and ``artifact_id`` are not
+            supported in this SDK release.
+
+        Returns
+        -------
+        Either ``T`` (when ``include_chunk_results=False``) or
+        :class:`~clichefactory.types.LongExtractionResult[T]`.
+
+        Billing
+        -------
+        Each chunk is a separate :meth:`extract` call; billing accrues per
+        page across all chunks.  ``include_chunk_results=True`` surfaces a
+        per-chunk cost breakdown under ``result.cost``.
+        """
+        from clichefactory._long import extract_long_async as _run
+
+        return await _run(
+            self,
+            file=file,
+            filename=filename,
+            chunker=chunker,
+            resolvers=resolvers,
+            default_resolver=default_resolver,
+            max_concurrency=max_concurrency,
+            include_chunk_results=include_chunk_results,
+            mode=mode,
+            parsing=parsing,
+            model=model,
+            ocr_model=ocr_model,
+            include_costs=include_costs,
+        )
+
+    def extract_long(self, **kwargs: Any) -> Any:
+        return run_sync(self.extract_long_async(**kwargs))
 
