@@ -22,7 +22,7 @@ class InferenceConfigPayload(BaseModel):
     extraction: "ModelEndpointPayload | None" = None
     ocr: "ModelEndpointPayload | None" = None
     extraction_mode: Literal["fast", "trained", "robust", "robust-trained"] | None = None
-    parser: Literal["default", "docling", "docling-vlm"] | None = None
+    parser: Literal["default", "docling", "docling-vlm", "ocr-llm"] | None = None
 
 
 class ModelEndpointPayload(BaseModel):

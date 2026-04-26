@@ -88,7 +88,7 @@ def _local_requires_ocr_llm(parsing: ParsingOptions) -> bool:
     img_fb = True if parsing.image_parser_fallback is None else parsing.image_parser_fallback
     pdf_img = parsing.pdf_image_parser or "docling"
     img = parsing.image_parser or "rapidocr"
-    if pdf_img == "docling_vlm":
+    if pdf_img in {"docling_vlm", "ocr_llm"}:
         return True
     if img == "ocr_llm":
         return True

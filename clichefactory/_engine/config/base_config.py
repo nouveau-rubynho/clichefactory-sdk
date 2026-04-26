@@ -32,7 +32,7 @@ class AioConfig:
 
     # --- PDF: image path strategy when PDF is classified as image ---
     pdf_image_parser: Literal[
-        "docling", "docling_vlm", "yolo_per_partes"
+        "docling", "docling_vlm", "ocr_llm", "yolo_per_partes"
     ] = "docling"
     pdf_fallback_to_ocr_llm: bool = True
     # If True, when PyMuPDF structured strategy fails, retry with image strategy

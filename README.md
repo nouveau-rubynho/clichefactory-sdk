@@ -376,7 +376,7 @@ Fine-grained control over local-mode document parsing. `ParsingOptions` only app
 from clichefactory import ParsingOptions
 
 parsing = ParsingOptions(
-    pdf_image_parser="docling",              # "docling", "docling_vlm", "vision_layout" (SaaS-only)
+    pdf_image_parser="docling",              # "docling", "docling_vlm", "ocr_llm", "vision_layout" (SaaS-only)
     pdf_fallback_to_ocr_llm=True,            # fall back to LLM OCR when local parser fails
     pdf_structured_fallback_to_image=False,   # retry structured PDFs as image-scanned on failure
     pdf_ocr_engine="rapidocr",               # "rapidocr", "tesseract", "easyocr"
@@ -427,6 +427,7 @@ Current scope: Ollama supports text extraction only (`extract(text=...)`). File 
 | Docling | `"docling"` | Local OCR + table structure via Docling (default). Full structured output. |
 | VLM direct | `"fast"` extraction mode | Sends the whole PDF to the LLM. No layout structure, fastest. |
 | Docling + VLM | `"docling_vlm"` | Docling for structure + per-page VLM refinement. |
+| OCR LLM | `"ocr_llm"` | Per-page VLM OCR for scanned/image PDFs. |
 | Vision Layout | `"vision_layout"` | More performant layout detection. **SaaS-only**. |
 
 Set via `ParsingOptions(pdf_image_parser=...)` or on `factory(parsing=...)`.

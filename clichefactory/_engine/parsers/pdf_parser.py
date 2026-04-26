@@ -25,7 +25,7 @@ class PdfRouterParser(MediaParser):
     Single entry point for .pdf parsing.
     - Classifies PDF as structured (native text) or image (scanned).
     - Structured -> PyMuPDF strategy (fast, layout-preserving).
-    - Image -> selected image strategy (docling, docling_vlm, yolo_per_partes).
+    - Image -> selected image strategy (docling, docling_vlm, ocr_llm, yolo_per_partes).
     - Optional: if structured fails and pdf_structured_fallback_to_image, retry with image.
     """
 
@@ -62,6 +62,7 @@ class PdfRouterParser(MediaParser):
         pdf_parser_map = {
             "docling": DoclingBaselineStrategy,
             "docling_vlm": DoclingVlmStrategy,
+            "ocr_llm": OcrLlmPdfParser,
         }
 
         try:
@@ -76,7 +77,10 @@ class PdfRouterParser(MediaParser):
             DoclingBaselineStrategy,
         )
 
-        if getattr(self._config, "pdf_fallback_to_ocr_llm", True):
+        if (
+            selected_cls is not OcrLlmPdfParser
+            and getattr(self._config, "pdf_fallback_to_ocr_llm", True)
+        ):
 
             class ImageWithOcrFallback(FallbackMediaParser):
                 def __init__(self, **kw: Any) -> None:

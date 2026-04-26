@@ -53,7 +53,7 @@ class Endpoint(BaseModel):
     api_base: str | None = None
 
 
-PdfImageParser = Literal["docling", "docling_vlm", "vision_layout"]
+PdfImageParser = Literal["docling", "docling_vlm", "ocr_llm", "vision_layout"]
 PdfOcrEngine = Literal["tesseract", "rapidocr", "easyocr"]
 ImageParser = Literal["pytesseract", "rapidocr", "docling", "ocr_llm"]
 

@@ -62,7 +62,7 @@ class ParsingPayload(BaseModel):
 
     input_mode: Literal["markdown", "media"] | None = None
     pdf_image_parser: Literal[
-        "docling", "docling_vlm", "yolo_per_partes"
+        "docling", "docling_vlm", "ocr_llm", "yolo_per_partes"
     ] | None = None
     pdf_fallback_to_ocr_llm: bool | None = None
     pdf_structured_fallback_to_image: bool | None = None
