@@ -2,6 +2,17 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.2.2] — 2026-04-29
+
+### Fixed
+- **OpenAI client**: switched from `max_tokens` to `max_completion_tokens` for
+  compatibility with newer OpenAI models (GPT-5.x, o-series) that reject the
+  legacy parameter. Reasoning models (o1/o3/o4 prefixes) now also have
+  `temperature` omitted, since they reject it.
+- **Anthropic client**: structured output schemas now have
+  `additionalProperties: false` recursively applied to all object nodes,
+  required by the Anthropic Messages API for `json_schema` outputs.
+
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 (pre-1.0: minor bumps may introduce additive public API, patch bumps are

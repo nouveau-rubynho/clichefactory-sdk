@@ -31,6 +31,17 @@ def _model_name_for_openai(name: str) -> str:
     return name.strip()
 
 
+# Reasoning models (o-series) reject the temperature parameter entirely.
+_NO_TEMPERATURE_PREFIXES = ("o1", "o3", "o4")
+
+
+def _model_supports_temperature(model_name: str) -> bool:
+    return not any(
+        model_name == p or model_name.startswith(p + "-")
+        for p in _NO_TEMPERATURE_PREFIXES
+    )
+
+
 class OpenAIAIClient:
     """AIClient implementation using OpenAI API."""
 
@@ -49,6 +60,7 @@ class OpenAIAIClient:
         )
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._supports_temperature = _model_supports_temperature(self._model_name)
         client_kwargs = {"api_key": api_key, "max_retries": max_retries}
         if api_base:
             client_kwargs["base_url"] = api_base
@@ -57,6 +69,15 @@ class OpenAIAIClient:
 
     def set_cost_tracker(self, cost_tracker: "UsageTracker | None") -> None:
         self._cost_tracker = cost_tracker
+
+    def _chat_kwargs(self) -> dict:
+        """Common kwargs for chat.completions calls. Uses max_completion_tokens
+        (the unified successor to max_tokens) and skips temperature for reasoning
+        models that reject it."""
+        kwargs: dict = {"max_completion_tokens": self._max_tokens}
+        if self._supports_temperature:
+            kwargs["temperature"] = self._temperature
+        return kwargs
 
     def _record_usage(self, usage) -> None:
         if not self._cost_tracker or not usage:
@@ -76,8 +97,7 @@ class OpenAIAIClient:
         data_url = f"data:{mime};base64,{b64}"
         response = self._client.chat.completions.create(
             model=self._model_name,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
+            **self._chat_kwargs(),
             messages=[
                 {
                     "role": "user",
@@ -158,8 +178,7 @@ class OpenAIAIClient:
             )
         response = self._client.chat.completions.create(
             model=self._model_name,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
+            **self._chat_kwargs(),
             messages=[{"role": "user", "content": content}],
         )
         self._record_usage(getattr(response, "usage", None))
@@ -198,8 +217,7 @@ class OpenAIAIClient:
         full_prompt = f"{prompt}\n\nDocument:\n{text}"
         response = self._client.chat.completions.create(
             model=self._model_name,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
+            **self._chat_kwargs(),
             messages=[{"role": "user", "content": full_prompt}],
             response_format={"type": "json_object"},
         )
@@ -238,8 +256,7 @@ class OpenAIAIClient:
         """Call chat.completions with structured output."""
         response = self._client.beta.chat.completions.parse(
             model=self._model_name,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
+            **self._chat_kwargs(),
             messages=[{"role": "user", "content": prompt}],
             response_format=schema,
         )

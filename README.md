@@ -2,7 +2,7 @@
 
 ## Introduction
 
-ClicheFactory is a structured data extraction SDK. It parses documents (PDF, images, Office, email, etc.) and extracts structured data into Pydantic models — locally with your own LLM keys, or via the ClicheFactory service. Training is managed through [ClicheFactory](https://clichefactory.com); the SDK consumes trained artifacts via `artifact_id`.
+ClicheFactory is a structured data extraction SDK. It parses documents (PDF, images, Office, email, etc.) and extracts structured data into Pydantic models — locally with your own LLM keys, or via the ClicheFactory service. Training is managed through [ClicheFactory](https://clichefactory.com) (BYOK only — supply your OpenAI, Gemini, or Anthropic key); the SDK consumes trained artifacts via `artifact_id`.
 
 ## Installing
 
@@ -73,7 +73,7 @@ Local paths (and raw bytes) are automatically uploaded by the SDK before the ser
 
 ### Trained extraction
 
-Training is done through [ClicheFactory](https://ClicheFactory.com). Once you have a trained artifact, use it via `artifact_id`:
+Training currently runs in BYOK mode only. Train through [ClicheFactory](https://clichefactory.com) using your own LLM key (OpenAI, Gemini, or Anthropic). Once you have a trained artifact, use it via `artifact_id`:
 
 ```python
 from clichefactory import factory
@@ -87,8 +87,8 @@ result = cliche.extract(file="document.pdf")
 
 **BYOK vs hosted (service mode):**
 
-- **BYOK** — Pass `model=Endpoint(..., api_key=...)` (and optionally `ocr_model=`) so extraction/OCR use your LLM credentials. Billing uses the BYOK rate.
-- **Hosted** — Omit `model` / `ocr_model` so the platform runs the LLMs. Your Pydantic schema must still match the trained pipeline’s output shape (as exported from ClicheFactory).
+- **BYOK** — Pass `model=Endpoint(..., api_key=...)` (and optionally `ocr_model=`) so extraction/OCR use your LLM credentials. Billing uses the BYOK rate. Training requires this path.
+- **Hosted (extraction only)** — Omit `model` / `ocr_model` so the platform runs the LLMs. Your Pydantic schema must still match the trained pipeline's output shape (as exported from ClicheFactory). Hosted training is on the roadmap.
 
 **Explicit `mode` vs artifact default:** You can pass `mode=` (e.g. `mode="trained"`) or omit it. When the artifact defines a pipeline mode (e.g. `robust-trained`), the service can apply that mode automatically if you do not override it.
 
@@ -100,8 +100,8 @@ result = cliche.extract(file="document.pdf")
 |------|-------|---------|-------------|
 | `None` (default) | yes | yes | Parse document -> markdown -> LLM extraction |
 | `"fast"` | yes | yes | Send raw file bytes directly to LLM (no OCR) |
-| `"trained"` | - | yes | Uses a trained artifact (DSPy `BaseExtractor` on OCR text) |
-| `"robust"` | - | yes | Untrained extract + verify (two-stage) |
+| `"trained"` | - | yes | Uses a trained artifact (DSPy `BaseExtractor` on OCR text). Trained via ClicheFactory (BYOK). |
+| `"robust"` | - | yes | Two-stage extract + verify |
 | `"robust-trained"` | - | yes | Trained extract + verify; **artifact must be trained for verification** |
 
 ```python
@@ -328,7 +328,7 @@ Default rates (USD; the API may override these per deployment via stored rate ro
 | Operation | Full-service | BYOK |
 |-----------|--------------|------|
 | Extraction (per page) | $0.005 | $0.0005 |
-| Training | via [ClicheFactory](https://clichefactory.com) | via [ClicheFactory](https://clichefactory.com) |
+| Training (per run) | — (BYOK only during MVP) | flat fee — see [ClicheFactory](https://clichefactory.com) |
 
 ## Configuration
 

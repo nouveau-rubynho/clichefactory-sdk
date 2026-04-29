@@ -28,6 +28,37 @@ def _model_name_for_anthropic(name: str) -> str:
     return name.strip()
 
 
+def _add_additional_properties_false(schema: dict) -> dict:
+    """Recursively set additionalProperties=false on every object node.
+
+    Anthropic's structured output API requires this to be explicitly present
+    on all object types (root and nested $defs alike).
+    """
+    import copy
+
+    schema = copy.deepcopy(schema)
+
+    def _walk(node: dict) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "object":
+            node.setdefault("additionalProperties", False)
+        for key in ("properties", "$defs", "definitions"):
+            if key in node:
+                for v in node[key].values():
+                    _walk(v)
+        for key in ("items", "additionalItems"):
+            if key in node and isinstance(node[key], dict):
+                _walk(node[key])
+        for key in ("anyOf", "allOf", "oneOf"):
+            if key in node:
+                for v in node[key]:
+                    _walk(v)
+
+    _walk(schema)
+    return schema
+
+
 def _anthropic_media_block(content: bytes, mime: str) -> dict:
     """Build a Messages API content block for bytes + MIME.
 
@@ -257,7 +288,7 @@ class AnthropicAIClient:
             output_config={
                 "format": {
                     "type": "json_schema",
-                    "schema": schema.model_json_schema(),
+                    "schema": _add_additional_properties_false(schema.model_json_schema()),
                 }
             },
         )
@@ -290,7 +321,7 @@ class AnthropicAIClient:
             output_config={
                 "format": {
                     "type": "json_schema",
-                    "schema": schema.model_json_schema(),
+                    "schema": _add_additional_properties_false(schema.model_json_schema()),
                 }
             },
         )
