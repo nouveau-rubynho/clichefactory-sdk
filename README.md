@@ -71,6 +71,12 @@ invoice = c.extract(file="/path/to/invoice.pdf")
 
 Local paths (and raw bytes) are automatically uploaded by the SDK before the service processes them.
 
+#### Retries and idempotency
+
+Service-mode requests retry automatically on transient transport errors and on the standard transient HTTP statuses (`408`, `425`, `429`, `500`, `502`, `503`, `504`). Backoff is bounded (max 4 attempts, max 8 s per sleep) and `Retry-After` is honored when the server sends it (capped at 30 s). Non-retryable `4xx` responses (e.g. invalid API key, validation errors) still fail fast — the SDK does not retry those.
+
+Each retried request reuses the same idempotency key, so the service replays its cached response instead of re-running the work or re-billing for it. This is invisible to your code; you don't need to do anything to opt in.
+
 ### Trained extraction
 
 Training currently runs in BYOK mode only. Train through [ClicheFactory](https://clichefactory.com) using your own LLM key (OpenAI, Gemini, or Anthropic). Once you have a trained artifact, use it via `artifact_id`:

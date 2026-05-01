@@ -2,6 +2,37 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.3.0] — 2026-05-01
+
+### Added
+
+- **Automatic retries on transient service errors.** Service-mode HTTP
+  callsites (`extract`, `to_markdown`, presigned upload, presigned PUT)
+  now retry on connection / read errors and on `408`, `425`, `429`,
+  `500`, `502`, `503`, `504` responses. Bounded at 4 attempts with
+  full-jitter exponential backoff (max 8 s per sleep). When the server
+  sends `Retry-After` (e.g. when rate-limited), the SDK honors it,
+  clamped to 30 s so a misbehaving upstream can't park a request
+  indefinitely. Non-retryable 4xx responses (auth, validation,
+  not-found) still fail fast as before.
+- **Idempotency keys on retries.** `extract` already derived an
+  idempotency key from the request payload and sent it inside the
+  canonical envelope; the same key is now reused on every retry so the
+  server replays the cached response instead of double-billing. The
+  `to_markdown` and presigned-upload requests now also derive a stable
+  key and send it as the `Idempotency-Key` HTTP header. The presigned
+  S3 PUT itself is naturally idempotent on URL+content, so no key is
+  required there — retries just cover transport hiccups.
+
+### Notes for consumers
+
+- No public API changed. The retry / idempotency wiring is internal to
+  the service-mode transport layer; existing call sites get the new
+  behavior automatically on upgrade.
+- Users wanting to pin their own idempotency key (today the SDK derives
+  one from the request body) — that knob is still deferred until a real
+  trigger surfaces.
+
 ## [0.2.2] — 2026-04-29
 
 ### Fixed

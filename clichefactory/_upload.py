@@ -4,6 +4,8 @@ Handles presigning via aio-server and uploading file bytes via HTTP PUT.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +13,7 @@ from typing import Any, Literal
 
 import httpx
 
+from clichefactory._retry import request_with_retries
 from clichefactory.errors import (
     ErrorInfo,
     ServiceUnavailableError,
@@ -32,8 +35,17 @@ class PresignResult:
     document_id: str | None
 
 
-def _headers(api_key: str) -> dict[str, str]:
-    return {"X-API-KEY": api_key, "Content-Type": "application/json"}
+def _headers(api_key: str, *, idempotency_key: str | None = None) -> dict[str, str]:
+    h = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+    if idempotency_key is not None:
+        h["Idempotency-Key"] = idempotency_key
+    return h
+
+
+def _idempotency_key_for(payload: dict[str, Any]) -> str:
+    """Derive a stable Idempotency-Key from a presign request body."""
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _guess_content_type(filename: str) -> str | None:
@@ -79,9 +91,17 @@ async def presign(
     if artifact_id is not None:
         body["artifact_id"] = artifact_id
 
+    # Stable across retries so aio-server can replay the same presign result
+    # rather than minting a new file_uri / document_id every time.
+    idempotency_key = _idempotency_key_for(body)
+    request_headers = _headers(api_key, idempotency_key=idempotency_key)
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(url, json=body, headers=_headers(api_key))
+            async def _send() -> httpx.Response:
+                return await client.post(url, json=body, headers=request_headers)
+
+            resp = await request_with_retries(_send)
     except httpx.RequestError as e:
         raise ServiceUnavailableError(
             ErrorInfo(
@@ -119,14 +139,23 @@ async def upload_bytes(
     headers: dict[str, str] | None = None,
     content_type: str | None = None,
 ) -> None:
-    """PUT file bytes to a presigned URL."""
+    """PUT file bytes to a presigned URL.
+
+    Retried on transient transport errors and 5xx. S3-style PUTs are
+    inherently idempotent on the URL+content (the URL embeds the object
+    key), so no idempotency key is involved — re-uploading the same
+    bytes to the same presigned URL is safe.
+    """
     put_headers: dict[str, str] = dict(headers or {})
     if content_type:
         put_headers["Content-Type"] = content_type
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.put(upload_url, content=data, headers=put_headers)
+            async def _send() -> httpx.Response:
+                return await client.put(upload_url, content=data, headers=put_headers)
+
+            resp = await request_with_retries(_send)
     except httpx.RequestError as e:
         raise UploadError(
             ErrorInfo(

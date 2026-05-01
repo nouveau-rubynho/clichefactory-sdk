@@ -9,6 +9,7 @@ from typing import Any, TypeVar
 import httpx
 from pydantic import BaseModel
 
+from clichefactory._retry import request_with_retries
 from clichefactory._schema import simple_schema_to_canonical
 from clichefactory._service_url import resolve_service_base_url
 
@@ -25,8 +26,26 @@ from clichefactory.types import Endpoint, ParsingOptions
 T = TypeVar("T", bound=BaseModel)
 
 
-def _headers(api_key: str) -> dict[str, str]:
-    return {"X-API-KEY": api_key, "Content-Type": "application/json"}
+def _headers(api_key: str, *, idempotency_key: str | None = None) -> dict[str, str]:
+    h = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+    if idempotency_key is not None:
+        # aio-server's public endpoints (/v1/ocr/to-markdown, /v1/uploads/presign,
+        # /v1/extract, /v1/to-markdown) accept Idempotency-Key as a header; the
+        # canonical envelope endpoint reads it from the body instead.
+        h["Idempotency-Key"] = idempotency_key
+    return h
+
+
+def _idempotency_key_for(payload: dict[str, Any]) -> str:
+    """Derive a stable Idempotency-Key from a request body.
+
+    The same body must produce the same key on every retry attempt; that's
+    the contract aio-server's idempotency store keys off
+    (``(tenant_id, idempotency_key, endpoint)``). Sorting the JSON keys
+    keeps dict-iteration order from leaking into the hash.
+    """
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _endpoint_to_payload(ep: Endpoint | None) -> dict[str, Any] | None:
@@ -180,7 +199,13 @@ async def service_extract_via_canonical(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=body, headers=_headers(api_key))
+            # Body is built once outside the retry loop, so idempotency_key
+            # (in the envelope) is identical on every attempt — that's the
+            # contract aio-server keys off for replay.
+            async def _send() -> httpx.Response:
+                return await client.post(url, json=body, headers=_headers(api_key))
+
+            resp = await request_with_retries(_send)
     except httpx.RequestError as e:
         raise ServiceUnavailableError(
             ErrorInfo(
@@ -270,9 +295,18 @@ async def service_to_markdown(
     if parsing_payload:
         body["parsing"] = parsing_payload
 
+    # Derived once before the retry loop so every attempt sends the same
+    # key. aio-server replays the cached response when it sees a key it
+    # has seen complete before, preventing duplicate billing on retry.
+    idempotency_key = _idempotency_key_for(body)
+    request_headers = _headers(api_key, idempotency_key=idempotency_key)
+
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            resp = await client.post(url, json=body, headers=_headers(api_key))
+            async def _send() -> httpx.Response:
+                return await client.post(url, json=body, headers=request_headers)
+
+            resp = await request_with_retries(_send)
     except httpx.RequestError as e:
         raise ServiceUnavailableError(
             ErrorInfo(
