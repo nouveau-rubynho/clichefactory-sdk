@@ -156,6 +156,10 @@ class OllamaAIClient:
             error_prefix="Ollama returned invalid JSON for freeform extraction",
         )
 
+    def supports_bytes(self, mime: str) -> bool:
+        """Ollama (text-only MVP) does not support raw-bytes extraction."""
+        return False
+
     def extract_from_bytes(
         self,
         content: bytes,

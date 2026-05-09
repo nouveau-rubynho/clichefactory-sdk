@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, TypeVar
 from anthropic import Anthropic
 from pydantic import BaseModel
 
+from clichefactory._engine.ai_clients.mime_support import is_default_direct_bytes_mime
 from clichefactory._engine.ai_clients.prompts import DEFAULT_EXTRACTION_PROMPT
+from clichefactory._engine.ai_clients.protocol import UnsupportedBytesMimeError
 from clichefactory._engine.ai_clients.json_utils import safe_json_loads
 from clichefactory._extract_validation import validate_or_raise_raw
 
@@ -253,6 +255,10 @@ class AnthropicAIClient:
             error_prefix="Anthropic returned invalid JSON for freeform extraction",
         )
 
+    def supports_bytes(self, mime: str) -> bool:
+        """Anthropic accepts PDFs (document block) and common image MIMEs."""
+        return is_default_direct_bytes_mime(mime)
+
     def extract_from_bytes(
         self,
         content: bytes,
@@ -262,7 +268,16 @@ class AnthropicAIClient:
         *,
         raise_on_validation_error: bool = True,
     ) -> T:
-        """End-to-end extraction: bytes + schema -> Pydantic instance. Anthropic supports PDF/images directly."""
+        """End-to-end extraction: bytes + schema -> Pydantic instance.
+
+        Anthropic supports PDFs (``document`` block) and the image MIMEs
+        ``image/jpeg``, ``image/png``, ``image/gif``, ``image/webp``. For
+        other MIME types pre-flight with :meth:`supports_bytes` and parse
+        to markdown first; calling this method with an unsupported *mime*
+        raises :class:`UnsupportedBytesMimeError`.
+        """
+        if not self.supports_bytes(mime):
+            raise UnsupportedBytesMimeError(mime, "Anthropic")
         instr = prompt or DEFAULT_EXTRACTION_PROMPT
         content_blocks: list = [{"type": "text", "text": instr}]
         content_blocks.append(_anthropic_media_block(content, mime))

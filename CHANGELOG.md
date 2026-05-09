@@ -2,6 +2,48 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.4.0] — 2026-05-09
+
+### Added
+
+- **Fast mode now works for every format we have a parser for.** The
+  `mode="fast"` / `mode="one-shot"` extract path used to send raw bytes
+  directly to the LLM and would fail with a vendor `400 INVALID_ARGUMENT`
+  when the MIME was not supported (e.g. `message/rfc822` for emails,
+  Office formats, CSV). The SDK now pre-flights via the new
+  `AIClient.supports_bytes(mime)` capability check and, when the vendor
+  cannot accept the bytes directly, transparently parses the file to
+  markdown locally and runs a single
+  `client.extract(text=markdown, schema=...)` call. Fast-mode semantics
+  are preserved (one LLM call for the extraction itself, no DSPy
+  pipeline). PDFs and common image MIMEs (`image/jpeg|png|gif|webp`)
+  continue to use the multimodal raw-bytes path unchanged.
+- **`AIClient.supports_bytes(mime)`** added to the protocol. Each
+  built-in client (`GeminiAIClient`, `OpenAIAIClient`,
+  `AnthropicAIClient`, `OllamaAIClient`) implements it. Ollama always
+  returns `False` (no multimodal support in MVP).
+- **`UnsupportedBytesMimeError`** raised by `extract_from_bytes` when
+  callers bypass the capability check and pass an unsupported MIME.
+  Replaces the cryptic raw vendor `400` for that case.
+- **`is_default_direct_bytes_mime` / `client_supports_bytes`** helper
+  functions exported from `clichefactory._engine.ai_clients` for callers
+  building their own routing (e.g. `aio-server` extraction service). The
+  free `client_supports_bytes(client, mime)` falls back to a conservative
+  default (PDF + common image MIMEs) when a BYO client does not
+  implement `supports_bytes`.
+
+### Notes for consumers
+
+- No public `Cliche.extract` argument changed. Existing callers running
+  `mode="fast"` on EML / DOCX / XLSX / CSV / ODT / DOC will start
+  succeeding instead of raising. Latency increases by the local parse
+  step (typically <300 ms for emails and small office docs); LLM call
+  count is unchanged.
+- BYO `AIClient` implementations that do not declare `supports_bytes`
+  keep working — the SDK falls back to a default heuristic. Implementing
+  `supports_bytes` is recommended so vendor-specific MIME support can be
+  declared explicitly.
+
 ## [0.3.0] — 2026-05-01
 
 ### Added

@@ -14,7 +14,9 @@ from typing import TYPE_CHECKING, TypeVar
 from openai import OpenAI
 from pydantic import BaseModel
 
+from clichefactory._engine.ai_clients.mime_support import is_default_direct_bytes_mime
 from clichefactory._engine.ai_clients.prompts import DEFAULT_EXTRACTION_PROMPT, SIMPLE_OCR_PROMPT
+from clichefactory._engine.ai_clients.protocol import UnsupportedBytesMimeError
 from clichefactory._engine.ai_clients.json_utils import safe_json_loads
 from clichefactory._extract_validation import validate_or_raise_raw
 
@@ -228,6 +230,10 @@ class OpenAIAIClient:
             error_prefix="OpenAI returned invalid JSON for freeform extraction",
         )
 
+    def supports_bytes(self, mime: str) -> bool:
+        """OpenAI accepts PDFs (via Files+Responses) and common image MIMEs."""
+        return is_default_direct_bytes_mime(mime)
+
     def extract_from_bytes(
         self,
         content: bytes,
@@ -237,7 +243,15 @@ class OpenAIAIClient:
         *,
         raise_on_validation_error: bool = True,
     ) -> T:
-        """End-to-end extraction. OpenAI requires OCR first for PDFs/images, then extract."""
+        """End-to-end extraction. OpenAI runs OCR first then extracts.
+
+        For non-image / non-PDF MIME types (EML, DOCX, XLSX, ODT, …),
+        pre-flight with :meth:`supports_bytes` and parse to markdown
+        first; calling this method with an unsupported *mime* raises
+        :class:`UnsupportedBytesMimeError`.
+        """
+        if not self.supports_bytes(mime):
+            raise UnsupportedBytesMimeError(mime, "OpenAI")
         markdown = self.ocr(content, mime, SIMPLE_OCR_PROMPT)
         return self.extract(
             markdown,

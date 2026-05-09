@@ -56,6 +56,8 @@ Skips OCR/parsing entirely — sends the raw file to a multimodal LLM.
 invoice = c.extract(file="invoice.pdf", mode="fast")
 ```
 
+For PDFs and the common image MIMEs (`image/jpeg|png|gif|webp`) this is a single multimodal LLM call. For formats that vendors do not accept as raw bytes (email `.eml`, Office docs `.docx`/`.xlsx`/`.odt`/`.doc`, `.csv`, `.txt`), `mode="fast"` transparently parses the file to markdown locally and runs a single text-mode extraction call — still one LLM hit, just preceded by a local parse step. No code changes required from you. Each `AIClient` declares its supported MIMEs via `supports_bytes(mime)`; `OllamaAIClient` always degrades because Ollama doesn't accept multimodal inputs in the SDK's MVP.
+
 ### Service mode (SaaS)
 
 ```python

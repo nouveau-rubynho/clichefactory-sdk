@@ -8,6 +8,26 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 
+class UnsupportedBytesMimeError(ValueError):
+    """Raised when ``extract_from_bytes`` is called with a MIME the vendor
+    does not accept as raw bytes (e.g. ``message/rfc822`` for any of the
+    mainstream hosted LLMs).
+
+    Callers should pre-flight via
+    :func:`clichefactory._engine.ai_clients.mime_support.client_supports_bytes`
+    and route unsupported MIMEs through the parser pipeline (markdown)
+    instead.
+    """
+
+    def __init__(self, mime: str | None, vendor: str) -> None:
+        self.mime = mime or ""
+        self.vendor = vendor
+        super().__init__(
+            f"{vendor} does not accept {self.mime!r} as raw bytes; "
+            "parse to markdown first or call extract(text, schema)."
+        )
+
+
 class AIClient(Protocol):
     """Unified LLM client for OCR, extraction, and optional end-to-end extraction."""
 
@@ -67,5 +87,19 @@ class AIClient(Protocol):
         *,
         raise_on_validation_error: bool = True,
     ) -> T:
-        """End-to-end extraction: bytes + schema -> Pydantic instance. OCR + extract in one call when supported."""
+        """End-to-end extraction: bytes + schema -> Pydantic instance.
+
+        Raises :class:`UnsupportedBytesMimeError` when the vendor does not
+        accept *mime* as raw bytes. Pre-flight with :meth:`supports_bytes`
+        and route unsupported MIMEs through the parser pipeline.
+        """
+        ...
+
+    def supports_bytes(self, mime: str) -> bool:
+        """Return ``True`` when ``extract_from_bytes`` can be called with *mime*.
+
+        Used by callers (the SDK ``Cliche.extract`` fast path,
+        ``aio-server`` extraction service) to decide between sending raw
+        bytes to the vendor and parsing to markdown locally first.
+        """
         ...
