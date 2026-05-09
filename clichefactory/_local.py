@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import os
 from pathlib import Path
 from typing import Any, TypeVar
 
 import anyio
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from clichefactory._schema import canonical_schema_to_pydantic
 from clichefactory.errors import (
@@ -435,10 +438,58 @@ async def extract_local(
         return (out, doc) if include_doc else out
 
     if mode in ("fast", "one-shot"):
+        from clichefactory._engine.ai_clients import client_supports_bytes
+
+        if client_supports_bytes(client, mime):
+            logger.debug(
+                "extract_local: fast path via extract_from_bytes (mime=%s, file=%s)",
+                mime,
+                fname,
+            )
+            try:
+                out = client.extract_from_bytes(
+                    content=content,
+                    mime=mime,
+                    schema=schema_cls,
+                    raise_on_validation_error=ro,
+                )
+            except RawExtractionValidationError as exc:
+                if allow_partial:
+                    return finalize_extract_result(
+                        exc.data,
+                        schema,
+                        postprocess,
+                        allow_partial=True,
+                        validation_errors=exc.validation_errors,
+                        response_status=None,
+                    )
+                raise exc.__cause__ from exc
+            except Exception as e:
+                raise ExtractionError(ErrorInfo(code="extract.failed", message=str(e))) from e
+            return out
+
+        # Vendor does not accept these bytes (EML, DOCX, XLSX, ODT, …).
+        # Degrade to: parse → markdown → single extract(text, schema) call.
+        # Fast-mode semantics are preserved (one LLM call for extraction, no
+        # DSPy pipeline); the parse step adds local CPU work but keeps the
+        # call working for every format we have a parser for.
+        logger.info(
+            "extract_local: fast path degrading to markdown (mime=%s, file=%s); "
+            "vendor does not accept these bytes directly",
+            mime,
+            fname,
+        )
+        doc = await to_markdown_local(
+            file=content,
+            filename=fname,
+            parsing=parsing,
+            llm=llm,
+            ocr_llm=ocr_llm,
+            include_costs=include_costs,
+        )
         try:
-            out = client.extract_from_bytes(
-                content=content,
-                mime=mime,
+            out = client.extract(
+                text=doc.get_markdown(),
                 schema=schema_cls,
                 raise_on_validation_error=ro,
             )

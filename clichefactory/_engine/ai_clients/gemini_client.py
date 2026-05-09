@@ -16,7 +16,9 @@ from google.genai import types
 from google.genai import errors as genai_errors
 from pydantic import BaseModel
 
+from clichefactory._engine.ai_clients.mime_support import is_default_direct_bytes_mime
 from clichefactory._engine.ai_clients.prompts import DEFAULT_EXTRACTION_PROMPT
+from clichefactory._engine.ai_clients.protocol import UnsupportedBytesMimeError
 from clichefactory._engine.ai_clients.json_utils import safe_json_loads
 from clichefactory._extract_validation import validate_or_raise_raw
 
@@ -354,6 +356,10 @@ class GeminiAIClient:
             error_prefix="Gemini returned invalid JSON for freeform extraction",
         )
 
+    def supports_bytes(self, mime: str) -> bool:
+        """Gemini accepts PDFs and the common image MIMEs as raw bytes."""
+        return is_default_direct_bytes_mime(mime)
+
     def extract_from_bytes(
         self,
         content: bytes,
@@ -363,7 +369,16 @@ class GeminiAIClient:
         *,
         raise_on_validation_error: bool = True,
     ) -> T:
-        """End-to-end extraction: bytes + schema -> Pydantic instance. Gemini supports PDF/images directly."""
+        """End-to-end extraction: bytes + schema -> Pydantic instance.
+
+        Gemini supports PDF and common image MIMEs directly. For other
+        MIME types (EML, DOCX, XLSX, ODT, …), pre-flight with
+        :meth:`supports_bytes` and parse to markdown first; calling this
+        method with an unsupported *mime* raises
+        :class:`UnsupportedBytesMimeError`.
+        """
+        if not self.supports_bytes(mime):
+            raise UnsupportedBytesMimeError(mime, "Gemini")
         instr = prompt or DEFAULT_EXTRACTION_PROMPT
         part = types.Part.from_bytes(data=content, mime_type=mime)
         contents = [instr, part]
