@@ -69,7 +69,7 @@ c = client.cliche(Invoice)
 invoice = c.extract(file="/path/to/invoice.pdf")
 ```
 
-**Service URL:** By default the SDK uses `http://127.0.0.1:4000` (local aio-server). For production, set the environment variable **`CLICHEFACTORY_API_URL`** to `https://api.clichefactory.com`, or pass **`base_url=`** to `factory()` explicitly (this overrides the env var).
+**Service URL:** The SDK talks to the public ClicheFactory API (`https://api.clichefactory.com`) out of the box — no configuration needed. To point at a different aio-server (local development, self-hosted instance), set **`CLICHEFACTORY_API_URL`** (e.g. `http://localhost:4000`) or pass **`base_url=`** to `factory()`. An explicit `base_url=` argument always wins over the env var.
 
 Local paths (and raw bytes) are automatically uploaded by the SDK before the service processes them.
 
@@ -410,7 +410,7 @@ For **local** runs, the primary extraction defaults are:
 
 Optional endpoints override extraction/OCR on `factory()` via `model` and `ocr_model`.
 
-For **service** mode, the only URL-related environment variable is **`CLICHEFACTORY_API_URL`** (unless you pass `base_url=` to `factory()`, which wins).
+For **service** mode, the only URL-related environment variable is **`CLICHEFACTORY_API_URL`**, used to override the default `https://api.clichefactory.com` (e.g. for local development or a self-hosted aio-server). An explicit `base_url=` on `factory()` wins over both.
 
 ### Ollama (local model inference)
 

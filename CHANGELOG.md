@@ -2,6 +2,18 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.4.2] — 2026-05-10
+
+### Documentation
+
+- Reframe the service-mode README to match the new default. The SDK has
+  targeted `https://api.clichefactory.com` since 0.4.1, but the README
+  still read like local dev was the happy path and `CLICHEFACTORY_API_URL`
+  was something you set "for production". It's the other way around now:
+  install, set `CLICHEFACTORY_API_KEY`, call `factory()` — same shape as
+  the OpenAI / Anthropic SDKs. `CLICHEFACTORY_API_URL` is the override
+  for local aio-server development and self-hosting.
+
 ## [0.4.1] — 2026-05-10
 
 ### Changed
