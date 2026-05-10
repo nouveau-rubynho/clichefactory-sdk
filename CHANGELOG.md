@@ -2,6 +2,20 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.4.1] — 2026-05-10
+
+### Changed
+
+- **Service-mode default base URL is now `https://api.clichefactory.com`**
+  (was `http://127.0.0.1:4000`). The aio-server is live in production at
+  this hostname, so installs of the SDK with no configuration now talk to
+  the public API by default. Local development must set
+  `CLICHEFACTORY_API_URL` (e.g. `http://localhost:4000`, or
+  `http://aio-server:8000` inside the Docker dev network) to point the
+  SDK back at a local instance. The explicit `Cliche(base_url=...)` /
+  CLI `--base-url` overrides and `~/.clichefactory/config.toml`
+  precedence are unchanged.
+
 ## [0.4.0] — 2026-05-09
 
 ### Added

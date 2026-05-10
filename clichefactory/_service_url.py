@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import os
 
-# Short term: default for local development. Override with CLICHEFACTORY_API_URL.
-# Medium term: change this default to https://api.clichefactory.com when shipping
-# public API broadly; local dev sets CLICHEFACTORY_API_URL once.
-_DEFAULT = "http://127.0.0.1:4000"
+# Default points at the public ClicheFactory API. Local development sets
+# CLICHEFACTORY_API_URL (e.g. http://localhost:4000 or http://aio-server:8000
+# inside Docker networks) to override.
+_DEFAULT = "https://api.clichefactory.com"
 _ENV = "CLICHEFACTORY_API_URL"
 
 
