@@ -2,6 +2,43 @@
 
 All notable changes to `clichefactory` are documented in this file.
 
+## [0.6.1] — 2026-05-14
+
+### Fixed
+
+- **`XlsxParser` and `DocxParser` could not be instantiated through
+  `MediaParserRegistry`.** `MediaParserRegistry.create_parser` always
+  forwards `media_parser_registry=<self>` to the parser constructor so
+  parsers that need to resolve sibling parsers (PDF, EML attachments)
+  can do so. `XlsxParser.__init__` and `DocxParser.__init__` did not
+  accept that kwarg, so any consumer that built parsers through the
+  registry (i.e. the canonical `MediaRouter` path) crashed with
+  `TypeError: __init__() got an unexpected keyword argument
+  'media_parser_registry'` the moment an `.xlsx` or `.docx` arrived.
+  Both constructors now accept `**kwargs` and forward through to
+  `MediaParser.__init__`, matching the rest of the parser family
+  (`CsvParser`, `TextParser`, `DocParser`, `EmlParser`,
+  `PdfRouterParser`). A regression test (`tests/test_media_parser_registry.py`)
+  round-trips every parser through `create_parser` so this signature
+  drift can't recur silently.
+
+### Changed
+
+- **`.odt` parsing now goes through LibreOffice (`soffice`), not
+  pandoc.** `office_converter` previously required pandoc for `.docx`
+  and `.odt` and only fell back to `soffice` for legacy `.doc`. In
+  practice `.docx` never hit this path (Docling handles it directly via
+  `DocxParser`), and pandoc is heavier to install than LibreOffice
+  while covering the same legacy office formats less reliably.
+  `convert_office_bytes_to_pdf_bytes` / `convert_office_to_pdf_path`
+  now route both `.doc` and `.odt` through `soffice --headless`. Pandoc
+  remains supported as a best-effort fallback if a host has pandoc but
+  no LibreOffice, but it is no longer a hard runtime requirement of
+  the default installation.
+- `clichefactory doctor` reflects the new contract: `soffice` is the
+  required binary for `.doc` / `.odt`, `pandoc` is reported as
+  informational only.
+
 ## [0.6.0] — 2026-05-11
 
 ### Fixed

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any
 
 from clichefactory._engine.adapters.docling_adapter import DoclingNormalizedDoc
 from clichefactory._engine.models.normalized_doc import NormalizedDoc
@@ -18,8 +19,13 @@ class DocxParser(MediaParser):
     DOCX -> DoclingDocument -> NormalizedDoc
     """
 
-    def __init__(self, cacher=None) -> None:
-        super().__init__(cacher=cacher)
+    def __init__(self, cacher=None, **kwargs: Any) -> None:
+        # ``MediaParserRegistry.create_parser`` always forwards
+        # ``media_parser_registry=<self>`` to every parser it instantiates.
+        # Accept (and forward) it via ``**kwargs`` so this parser can be
+        # constructed through the registry without a TypeError, even though
+        # DOCX parsing itself doesn't need to resolve sibling parsers.
+        super().__init__(cacher=cacher, **kwargs)
 
         # Minimal, predictable setup
         self._converter = DocumentConverter(
