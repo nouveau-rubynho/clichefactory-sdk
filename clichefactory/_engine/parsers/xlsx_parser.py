@@ -1,6 +1,6 @@
 from io import BytesIO
 import re
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 import logging
 
 import openpyxl
@@ -269,8 +269,13 @@ class XlsxParser(MediaParser):
       Table block per sheet (markdown table in get_markdown)
     """
 
-    def __init__(self, cacher=None) -> None:
-        super().__init__(cacher=cacher)
+    def __init__(self, cacher=None, **kwargs: Any) -> None:
+        # ``MediaParserRegistry.create_parser`` always forwards
+        # ``media_parser_registry=<self>`` to every parser it instantiates.
+        # Accept (and forward) it via ``**kwargs`` so this parser can be
+        # constructed through the registry without a TypeError, even though
+        # XLSX parsing itself doesn't need to resolve sibling parsers.
+        super().__init__(cacher=cacher, **kwargs)
 
     def document_parse(self, content: bytes, filename: str) -> NormalizedDoc:
         wb = openpyxl.load_workbook(BytesIO(content), data_only=True)

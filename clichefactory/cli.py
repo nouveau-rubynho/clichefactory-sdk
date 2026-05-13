@@ -402,6 +402,11 @@ def cmd_doctor(args: argparse.Namespace) -> None:
         err_count += 1
         print(f"  [ERR]  {msg}")
 
+    def info(msg: str) -> None:
+        # Purely informational lines (e.g. "optional dep not installed").
+        # Not counted against ok/warn/err totals.
+        print(f"  [INFO] {msg}")
+
     print("ClicheFactory Doctor\n")
 
     # --- Config file ---
@@ -476,17 +481,20 @@ def cmd_doctor(args: argparse.Namespace) -> None:
     else:
         warn("tesseract not found on PATH (needed for tesseract OCR engine)")
 
-    pandoc_path = shutil.which("pandoc")
-    if pandoc_path:
-        ok(f"pandoc: {pandoc_path}")
-    else:
-        warn("pandoc not found on PATH (needed for .odt/.doc conversion)")
-
     soffice_path = shutil.which("soffice")
     if soffice_path:
         ok(f"soffice (LibreOffice): {soffice_path}")
     else:
-        warn("soffice not found on PATH (needed for legacy .doc conversion)")
+        warn("soffice not found on PATH (needed for .doc / .odt conversion)")
+
+    # pandoc is an optional fallback path inside office_converter; the
+    # default deployment runs soffice for both .doc and .odt and never
+    # touches pandoc. Surfaced here for setups that prefer pandoc.
+    pandoc_path = shutil.which("pandoc")
+    if pandoc_path:
+        ok(f"pandoc: {pandoc_path}")
+    else:
+        info("pandoc not found on PATH (optional; soffice handles .doc / .odt)")
 
     print()
 

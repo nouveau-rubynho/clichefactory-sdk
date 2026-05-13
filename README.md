@@ -538,12 +538,12 @@ RapidOCR operates at the script level, not individual languages. Multiple Latin-
 
 For legacy Office files (`.doc`, `.odt`), the parser converts files to PDF first, then processes them through the PDF pipeline.
 
-This requires external system tools if you run it locally and not in service mode:
+This requires LibreOffice on the host if you run it locally and not in service mode:
 
-- `pandoc` for general Office -> PDF conversion
-- `LibreOffice` (`soffice`) for legacy `.doc` conversion
+- `LibreOffice` (`soffice`) handles both `.doc` and `.odt` natively. Install `libreoffice-core` + `libreoffice-writer` (Linux) or the LibreOffice app (macOS) and make sure `soffice` is on PATH.
+- `pandoc` is supported as a best-effort fallback for hosts that ship pandoc but not LibreOffice. Not required for the default install.
 
-If these tools are missing, `.doc`/`.odt` parsing will fail at runtime.
+If neither tool is available, `.doc` / `.odt` parsing raises a clear runtime error pointing you at the missing binary.
 
 ### Tesseract OCR
 
